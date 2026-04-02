@@ -1,0 +1,161 @@
+/**
+ * Split text into chunks for better AI processing
+ * @param {string} text - The text to be chunked
+ * @param {number} chunkSize - Maximum size of each chunk
+ * @param {number} overlap - Number of overlapping characters between chunks
+ * @returns {string[Array<{content: string, chunkIndex: number, pageNumber: number}>]} - Array of text chunks with metadata
+ */
+export const chunkText = (text, chunkSize = 500, overlap = 50) => {
+    if (!text || text.trim().length === 0) {
+        return [];
+    }
+
+    // Clean text while preserving paragraph structure
+    const cleanedText = text
+        .replace(/\r\n/g, '\n') // Normalize new lines
+        .replace(/\s+/g, ' ') // Replace multiple spaces with single space
+        .replace(/\n /g, '\n') // Remove spaces after new lines
+        .replace(/ \n/g, '\n') // Remove spaces before new lines
+        .trim();
+
+    // Try to split by paragraphs (single or double newlines)
+    const paragraphs = cleanedText.split(/\n+/).filter(p => p.trim().length > 0);
+
+    const chunks = [];
+    let currentChunk = [];
+    let currentWordCount = 0;
+    let chunkIndex = 0;
+
+    for (const paragraph of paragraphs) {
+        const paragraphWords = paragraph.trim().split(/\s+/);
+        const paragraphWordCount = paragraphWords.length;
+
+        //If single paragraph exceeds chunk size, split it by words
+        if (paragraphWordCount > chunkSize) {
+            if (currentChunk.length > 0) {
+                chunks.push({
+                    content: currentChunk.join('\n\n'),
+                    chunkIndex: chunkIndex++,
+                    pageNumber: 0
+                });
+                currentChunk = [];
+                currentWordCount = 0;
+            }
+
+            // Split large paragraph into word-based chunks
+            for (let i = 0; i < paragraphWords.length; i += (chunkSize - overlap)) {
+                const chunkWords = paragraphWords.slice(i, i + chunkSize);
+                chunks.push({
+                    content: chunkWords.join(' '),
+                    chunkIndex: chunkIndex++,
+                    pageNumber: 0
+                });
+
+                if (i + chunkSize >= paragraphWords.length) break;
+            }
+            continue;
+        }
+
+        // If adding this paragraph exceeds chunk size, save current chunk
+        if (currentWordCount + paragraphWordCount > chunkSize && currentChunk.length > 0) {
+            chunks.push({
+                content: currentChunk.join('\n\n'),
+                chunkIndex: chunkIndex++,
+                pageNumber: 0
+            });
+
+            //Create overlap from previous chunk
+            const prevChunkText = currentChunk.join(' ');
+            const prevWords = prevChunkText.split(/\s+/);
+            const overlapText = prevWords.slice(-Math.min(overlap, prevWords.length)).join(' ');
+
+            currentChunk = [overlapText, paragraph.trim()];
+            currentWordCount = overlapText.split(/\s+/).length + paragraphWordCount;
+        } else {
+            // Add paragraph to current chunk
+            currentChunk.push(paragraph.trim());
+            currentWordCount += paragraphWordCount;
+        }
+    }
+
+    //Add the last chunk
+    if (currentChunk.length > 0) {
+        chunks.push({
+            content: currentChunk.join('\n\n'),
+            chunkIndex: chunkIndex,
+            pageNumber: 0
+        });
+    }
+
+    //Fallback: if no chunks created, split by words
+    if (chunks.length === 0 && cleanedText.length > 0) {
+        const allWords = cleanedText.split(/\s+/);
+        for (let i = 0; i < allWords.length; i += (chunkSize - overlap)) {
+            const chunkWords = allWords.slice(i, i + chunkSize);
+            chunks.push({
+                content: chunkWords.join(' '),
+                chunkIndex: chunkIndex++,
+                pageNumber: 0
+            });
+
+            if (i + chunkSize >= allWords.length) break;
+        }
+    }
+
+    return chunks;
+};
+
+
+/**
+ * Find relevant chunks based on keyword matching
+ * @param {Array<Object>} chunks - Array of text chunks with metadata
+ * @param {string} query - The search query
+ * @param {number} maxChunks - Maximum number of chunks to return
+ * @returns {Array<object>} - Array of relevant chunks
+ */
+export const findRelevantChunks = (chunks, query, maxChunks = 3) => {
+    if (!chunks || chunks.length === 0 || !query) {
+        return [];
+    }
+
+    //Common stop words to exclude
+    const stopWords = new Set([
+        'the', 'is', 'at', 'which', 'on', 'a', 'an', 'and', 'or', 'but',
+        'in', 'with', 'to', 'for', 'of', 'as', 'by', 'this', 'that', 'it'
+    ]);
+
+    //Extract and clean query words
+    const queryWords = query
+        .toLowerCase()
+        .split(/\s+/)
+        .filter(w => w.length > 2 && !stopWords.has(w));
+}
+
+if (queryWords. length === 0) {
+    //Return clean chunk objects without Mongoose metadata 
+    return chunks.slice(0, maxChunks).map(chunk => ({
+        content: chunk.content,
+        chunkIndex: chunk.chunkIndex,
+        pageNumber: chunk.pageNumber,
+        _id: chunk._id
+    }))
+}
+
+const scoredChunks = chunk.map((chunk, index) => {
+    const content = chunk.content.toLowerCase();
+    const contentWords = content.split(/\s+/).length;
+    let score = 0;
+
+    //Score each query word
+    for (const word of queryWords) {
+        //Extract word match (higher score)
+        const exactMatches = (content.match( new RegExp(`\\b${word}\\b`, 'g')) || []).length;
+        score += exactMatches * 3;
+
+        //Partial match (lower score)
+        const partialMatches = (content.match(new RegExp(word, 'g')) || []).length;
+        score += Math.max(0, partialMatches - exactMatches) * 1.5;
+    }
+
+    
+})
